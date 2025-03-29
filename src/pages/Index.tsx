@@ -1,13 +1,30 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+
+import { useLastfm, LastfmProvider } from "@/contexts/LastfmContext";
+import LastfmLogin from "@/components/LastfmLogin";
+import Dashboard from "@/components/Dashboard";
+
+const LastfmApp = () => {
+  const { username, isLoading } = useLastfm();
+  
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-lastfm-light">
+        <div className="text-center">
+          <div className="h-16 w-16 border-4 border-t-lastfm-red border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-lastfm-dark">Loading your Last.fm profile...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  return username ? <Dashboard /> : <LastfmLogin />;
+};
 
 const Index = () => {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">Start building your amazing project here!</p>
-      </div>
-    </div>
+    <LastfmProvider>
+      <LastfmApp />
+    </LastfmProvider>
   );
 };
 

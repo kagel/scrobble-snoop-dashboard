@@ -44,6 +44,8 @@ const ScrobblesList: React.FC = () => {
   const { username } = useLastfm();
   const { toast } = useToast();
   
+  const lastfmBaseUrl = "https://www.last.fm";
+  
   // Filter scrobbles to last 24 hours and get active users
   const { recentScrobbles, activeUsers } = useMemo(() => {
     const cutoffTime = new Date();
@@ -144,10 +146,12 @@ const ScrobblesList: React.FC = () => {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await fetchScrobbles();
+      await fetchScrobbles(true);
       toast({
         title: "Refreshed",
-        description: "Latest scrobbles loaded",
+        description: activeUsers.size > 0 
+          ? `Updated scrobbles for ${activeUsers.size} active users`
+          : "No active users to update",
       });
     } finally {
       setRefreshing(false);
@@ -276,7 +280,6 @@ const ScrobblesList: React.FC = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-12"></TableHead>
                 <TableHead>Track</TableHead>
                 <TableHead>Artist</TableHead>
                 <TableHead>Album</TableHead>
@@ -287,27 +290,40 @@ const ScrobblesList: React.FC = () => {
             <TableBody>
               {visibleScrobbles.map((scrobble, index) => (
                 <TableRow key={`${scrobble.username}-${scrobble.date.getTime()}-${index}`}>
+                  <TableCell>{scrobble.track}</TableCell>
                   <TableCell>
-                    <img
-                      src={scrobble.image || "/placeholder.svg"}
-                      alt={scrobble.track}
-                      className="w-10 h-10 rounded-sm object-cover"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <a
-                      href={scrobble.url}
+                    <a 
+                      href={`${lastfmBaseUrl}/music/${encodeURIComponent(scrobble.artist)}`}
+                      className="hover:text-lastfm-red hover:underline"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="hover:text-lastfm-red transition-colors"
                     >
-                      {scrobble.track}
+                      {scrobble.artist}
                     </a>
                   </TableCell>
-                  <TableCell>{scrobble.artist}</TableCell>
-                  <TableCell>{scrobble.album}</TableCell>
-                  <TableCell>{scrobble.username}</TableCell>
-                  <TableCell>{format(scrobble.date, "HH:mm:ss")}</TableCell>
+                  <TableCell>
+                    {scrobble.album ? (
+                      <a 
+                        href={`${lastfmBaseUrl}/music/${encodeURIComponent(scrobble.artist)}/${encodeURIComponent(scrobble.album)}`}
+                        className="hover:text-lastfm-red hover:underline"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {scrobble.album}
+                      </a>
+                    ) : "-"}
+                  </TableCell>
+                  <TableCell>
+                    <a 
+                      href={`${lastfmBaseUrl}/user/${encodeURIComponent(scrobble.username)}`}
+                      className="hover:text-lastfm-red hover:underline"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {scrobble.username}
+                    </a>
+                  </TableCell>
+                  <TableCell>{format(scrobble.date, "HH:mm")}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

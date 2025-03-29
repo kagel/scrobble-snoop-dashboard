@@ -24,6 +24,8 @@ interface ArtistSummaryTableProps {
 }
 
 const ArtistSummaryTable: React.FC<ArtistSummaryTableProps> = ({ scrobbles }) => {
+  const lastfmBaseUrl = "https://www.last.fm";
+
   // Aggregate scrobbles by artist
   const artistSummaries = scrobbles.reduce<Record<string, ArtistSummary>>((acc, scrobble) => {
     if (!acc[scrobble.artist]) {
@@ -78,17 +80,31 @@ const ArtistSummaryTable: React.FC<ArtistSummaryTableProps> = ({ scrobbles }) =>
                 />
               </TableCell>
               <TableCell>
-                <a
-                  href={summary.url}
+                <a 
+                  href={`${lastfmBaseUrl}/music/${encodeURIComponent(summary.artist)}`}
+                  className="hover:text-lastfm-red hover:underline"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:text-lastfm-red transition-colors"
                 >
                   {summary.artist}
                 </a>
               </TableCell>
               <TableCell>{summary.trackCount}</TableCell>
-              <TableCell>{summary.users.size}</TableCell>
+              <TableCell>
+                {Array.from(summary.users).map((user, index) => (
+                  <React.Fragment key={user}>
+                    {index > 0 && ", "}
+                    <a 
+                      href={`${lastfmBaseUrl}/user/${encodeURIComponent(user)}`}
+                      className="hover:text-lastfm-red hover:underline"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {user}
+                    </a>
+                  </React.Fragment>
+                ))}
+              </TableCell>
               <TableCell>{format(summary.lastPlayed, "HH:mm:ss")}</TableCell>
             </TableRow>
           ))}

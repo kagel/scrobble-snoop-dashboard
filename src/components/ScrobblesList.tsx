@@ -5,7 +5,7 @@ import { useLastfm } from "@/contexts/LastfmContext";
 import ScrobbleCard from "./ScrobbleCard";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, ListIcon } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { 
@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/pagination";
 
 const ITEMS_PER_PAGE = 50;
+const AUTO_REFRESH_INTERVAL = 30000; // 30 seconds in milliseconds
 
 const ScrobblesList: React.FC = () => {
   const [scrobbles, setScrobbles] = useState<Scrobble[]>([]);
@@ -34,6 +35,7 @@ const ScrobblesList: React.FC = () => {
   const [page, setPage] = useState<number>(1);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<"card" | "table">("card");
+  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   
   const { username } = useLastfm();
   const { toast } = useToast();
@@ -44,22 +46,54 @@ const ScrobblesList: React.FC = () => {
     }
   }, [username]);
   
-  const fetchScrobbles = async () => {
+  // Set up auto-refresh interval
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (username) {
+        console.log("Auto-refreshing scrobbles...");
+        fetchScrobbles(true);
+      }
+    }, AUTO_REFRESH_INTERVAL);
+    
+    // Clean up interval on component unmount
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [username]);
+  
+  const fetchScrobbles = async (isAutoRefresh = false) => {
     if (!username) return;
     
-    setLoading(true);
+    if (!isAutoRefresh) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
+    
     try {
       const data = await getAllFriendsScrobbles(username);
       setScrobbles(data);
+      setLastRefreshed(new Date());
+      
+      if (isAutoRefresh) {
+        toast({
+          title: "Updated",
+          description: "Scrobbles list has been automatically updated",
+          variant: "default",
+        });
+      }
     } catch (error) {
       console.error("Error fetching scrobbles:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load scrobbles. Please try again later.",
-        variant: "destructive",
-      });
+      if (!isAutoRefresh) {
+        toast({
+          title: "Error",
+          description: "Failed to load scrobbles. Please try again later.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
   
@@ -128,6 +162,9 @@ const ScrobblesList: React.FC = () => {
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-medium text-lastfm-dark">
           Recent Scrobbles
+          <span className="text-xs text-lastfm-gray ml-2">
+            Last updated: {format(lastRefreshed, "HH:mm:ss")}
+          </span>
         </h2>
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">

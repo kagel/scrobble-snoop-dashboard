@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Scrobble, getAllFriendsScrobbles } from "@/services/lastfmApi";
+import React, { useState, useEffect, useMemo } from "react";
+import { Scrobble, getAllFriendsScrobbles, FetchProgress } from "@/services/lastfmApi";
 import { useLastfm } from "@/contexts/LastfmContext";
 import ScrobbleCard from "./ScrobbleCard";
 import ArtistSummaryTable from "./ArtistSummaryTable";
@@ -8,6 +8,7 @@ import { RefreshCw, ListIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Progress } from "@/components/ui/progress";
 import { 
   Table, 
   TableBody, 
@@ -28,6 +29,7 @@ import {
 
 const ITEMS_PER_PAGE = 50;
 const AUTO_REFRESH_INTERVAL = 30000; // 30 seconds in milliseconds
+const HOURS_TO_SHOW = 24;
 
 const ScrobblesList: React.FC = () => {
   const [scrobbles, setScrobbles] = useState<Scrobble[]>([]);
@@ -36,9 +38,22 @@ const ScrobblesList: React.FC = () => {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<"card" | "table" | "artist">("card");
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const [fetchProgress, setFetchProgress] = useState<FetchProgress | null>(null);
+  const [isAutoRefresh, setIsAutoRefresh] = useState<boolean>(false);
   
   const { username } = useLastfm();
   const { toast } = useToast();
+  
+  // Filter scrobbles to last 24 hours and get active users
+  const { recentScrobbles, activeUsers } = useMemo(() => {
+    const cutoffTime = new Date();
+    cutoffTime.setHours(cutoffTime.getHours() - HOURS_TO_SHOW);
+    
+    const recent = scrobbles.filter(s => s.date > cutoffTime);
+    const active = new Set(recent.map(s => s.username));
+    
+    return { recentScrobbles: recent, activeUsers: active };
+  }, [scrobbles]);
   
   useEffect(() => {
     if (username) {
@@ -49,8 +64,9 @@ const ScrobblesList: React.FC = () => {
   // Set up auto-refresh interval
   useEffect(() => {
     const intervalId = setInterval(() => {
-      if (username) {
-        console.log("Auto-refreshing scrobbles...");
+      if (username && activeUsers.size > 0) {
+        console.log("Auto-refreshing scrobbles for active users...");
+        setIsAutoRefresh(true);
         fetchScrobbles(true);
       }
     }, AUTO_REFRESH_INTERVAL);
@@ -59,10 +75,12 @@ const ScrobblesList: React.FC = () => {
     return () => {
       clearInterval(intervalId);
     };
-  }, [username]);
+  }, [username, activeUsers]);
   
   const fetchScrobbles = async (isAutoRefresh = false) => {
     if (!username) return;
+    
+    setIsAutoRefresh(isAutoRefresh);
     
     if (!isAutoRefresh) {
       setLoading(true);
@@ -71,14 +89,38 @@ const ScrobblesList: React.FC = () => {
     }
     
     try {
-      const data = await getAllFriendsScrobbles(username);
-      setScrobbles(data);
+      const data = await getAllFriendsScrobbles(
+        username, 
+        (progress) => {
+          setFetchProgress(progress);
+        },
+        isAutoRefresh,
+        isAutoRefresh ? Array.from(activeUsers) : undefined
+      );
+      
+      if (isAutoRefresh) {
+        // For auto-refresh, merge new scrobbles with existing ones
+        const cutoffTime = new Date();
+        cutoffTime.setHours(cutoffTime.getHours() - HOURS_TO_SHOW);
+        
+        // Keep old scrobbles from inactive users
+        const oldScrobbles = scrobbles.filter(s => 
+          s.date > cutoffTime && !activeUsers.has(s.username)
+        );
+        
+        setScrobbles([...oldScrobbles, ...data].sort((a, b) => 
+          b.date.getTime() - a.date.getTime()
+        ));
+      } else {
+        setScrobbles(data);
+      }
+      
       setLastRefreshed(new Date());
       
       if (isAutoRefresh) {
         toast({
           title: "Updated",
-          description: "Scrobbles list has been automatically updated",
+          description: `Updated scrobbles for ${activeUsers.size} active users`,
           variant: "default",
         });
       }
@@ -94,6 +136,8 @@ const ScrobblesList: React.FC = () => {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setFetchProgress(null);
+      setIsAutoRefresh(false);
     }
   };
   
@@ -113,8 +157,8 @@ const ScrobblesList: React.FC = () => {
   // Calculate pagination
   const startIndex = (page - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
-  const visibleScrobbles = scrobbles.slice(startIndex, endIndex);
-  const totalPages = Math.ceil(scrobbles.length / ITEMS_PER_PAGE);
+  const visibleScrobbles = recentScrobbles.slice(startIndex, endIndex);
+  const totalPages = Math.ceil(recentScrobbles.length / ITEMS_PER_PAGE);
   
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -123,9 +167,25 @@ const ScrobblesList: React.FC = () => {
     }
   };
   
-  if (loading) {
+  if (loading || (!isAutoRefresh && fetchProgress)) {
+    const progress = fetchProgress ? (
+      <div className="space-y-2 mb-8">
+        <div className="flex justify-between text-sm text-lastfm-gray">
+          <span>{fetchProgress.status}</span>
+          <span>
+            {fetchProgress.processedUsers} / {fetchProgress.totalUsers} users
+          </span>
+        </div>
+        <Progress 
+          value={(fetchProgress.processedUsers / fetchProgress.totalUsers) * 100} 
+          className="h-2 bg-lastfm-gray/20"
+        />
+      </div>
+    ) : null;
+
     return (
       <div className="space-y-4 mt-4">
+        {progress}
         {[...Array(5)].map((_, index) => (
           <div key={index} className="flex items-start space-x-3">
             <Skeleton className="h-16 w-16 rounded-md" />
@@ -140,7 +200,7 @@ const ScrobblesList: React.FC = () => {
     );
   }
   
-  if (scrobbles.length === 0) {
+  if (recentScrobbles.length === 0) {
     return (
       <div className="text-center py-10">
         <p className="text-lastfm-gray mb-4">No scrobbles found for you and your friends</p>
@@ -161,10 +221,15 @@ const ScrobblesList: React.FC = () => {
     <div className="mt-4">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-medium text-lastfm-dark">
-          Recent Scrobbles
+          Last {HOURS_TO_SHOW}h Scrobbles
           <span className="text-xs text-lastfm-gray ml-2">
             Last updated: {format(lastRefreshed, "HH:mm:ss")}
           </span>
+          {activeUsers.size > 0 && (
+            <span className="text-xs text-lastfm-gray ml-2">
+              ({activeUsers.size} active users)
+            </span>
+          )}
         </h2>
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
@@ -249,7 +314,7 @@ const ScrobblesList: React.FC = () => {
           </Table>
         </div>
       ) : (
-        <ArtistSummaryTable scrobbles={scrobbles} />
+        <ArtistSummaryTable scrobbles={recentScrobbles} />
       )}
 
       {(viewMode === "card" || viewMode === "table") && totalPages > 1 && (

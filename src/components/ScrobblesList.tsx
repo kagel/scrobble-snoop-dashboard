@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from "react";
 import { Scrobble, getAllFriendsScrobbles } from "@/services/lastfmApi";
 import { useLastfm } from "@/contexts/LastfmContext";
 import ScrobbleCard from "./ScrobbleCard";
+import ArtistSummaryTable from "./ArtistSummaryTable";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, ListIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -34,7 +34,7 @@ const ScrobblesList: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<"card" | "table">("card");
+  const [viewMode, setViewMode] = useState<"card" | "table" | "artist">("card");
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   
   const { username } = useLastfm();
@@ -169,12 +169,23 @@ const ScrobblesList: React.FC = () => {
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
             <span className="text-sm text-lastfm-gray">Card</span>
-            <Switch
-              checked={viewMode === "table"}
-              onCheckedChange={(checked) => setViewMode(checked ? "table" : "card")}
-              className="data-[state=checked]:bg-lastfm-red"
-            />
-            <span className="text-sm text-lastfm-gray">Table</span>
+            <div className="flex items-center space-x-1">
+              <Switch
+                checked={viewMode !== "card"}
+                onCheckedChange={(checked) => {
+                  if (!checked) setViewMode("card");
+                  else if (viewMode === "card") setViewMode("table");
+                }}
+                className="data-[state=checked]:bg-lastfm-red"
+              />
+              <span className="text-sm text-lastfm-gray">Table</span>
+              <Switch
+                checked={viewMode === "artist"}
+                onCheckedChange={(checked) => setViewMode(checked ? "artist" : "table")}
+                className="data-[state=checked]:bg-lastfm-red"
+              />
+              <span className="text-sm text-lastfm-gray">Artist</span>
+            </div>
           </div>
           <Button
             onClick={handleRefresh}
@@ -195,12 +206,12 @@ const ScrobblesList: React.FC = () => {
             <ScrobbleCard key={`${scrobble.username}-${scrobble.date.getTime()}-${index}`} scrobble={scrobble} />
           ))}
         </div>
-      ) : (
+      ) : viewMode === "table" ? (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-16"></TableHead>
+                <TableHead className="w-12"></TableHead>
                 <TableHead>Track</TableHead>
                 <TableHead>Artist</TableHead>
                 <TableHead>Album</TableHead>
@@ -212,85 +223,56 @@ const ScrobblesList: React.FC = () => {
               {visibleScrobbles.map((scrobble, index) => (
                 <TableRow key={`${scrobble.username}-${scrobble.date.getTime()}-${index}`}>
                   <TableCell>
-                    <img 
-                      src={scrobble.image || "/placeholder.svg"} 
-                      alt={`${scrobble.album} by ${scrobble.artist}`}
-                      className="w-10 h-10 object-cover rounded"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = "/placeholder.svg";
-                      }}
+                    <img
+                      src={scrobble.image || "/placeholder.svg"}
+                      alt={scrobble.track}
+                      className="w-10 h-10 rounded-sm object-cover"
                     />
                   </TableCell>
-                  <TableCell className="font-medium">
-                    <a 
-                      href={scrobble.url} 
-                      target="_blank" 
+                  <TableCell>
+                    <a
+                      href={scrobble.url}
+                      target="_blank"
                       rel="noopener noreferrer"
-                      className="hover:text-lastfm-red transition-colors duration-200"
+                      className="hover:text-lastfm-red transition-colors"
                     >
                       {scrobble.track}
                     </a>
                   </TableCell>
                   <TableCell>{scrobble.artist}</TableCell>
-                  <TableCell>{scrobble.album || "-"}</TableCell>
-                  <TableCell>
-                    <a 
-                      href={`https://www.last.fm/user/${scrobble.username}`}
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      className="text-lastfm-red hover:underline"
-                    >
-                      {scrobble.username}
-                    </a>
-                  </TableCell>
-                  <TableCell className="text-lastfm-gray text-sm">
-                    {format(scrobble.date, "MMM d, h:mm a")}
-                  </TableCell>
+                  <TableCell>{scrobble.album}</TableCell>
+                  <TableCell>{scrobble.username}</TableCell>
+                  <TableCell>{format(scrobble.date, "HH:mm:ss")}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
+      ) : (
+        <ArtistSummaryTable scrobbles={scrobbles} />
       )}
-      
-      {totalPages > 1 && (
-        <Pagination className="mt-6">
+
+      {(viewMode === "card" || viewMode === "table") && totalPages > 1 && (
+        <Pagination className="mt-4">
           <PaginationContent>
             <PaginationItem>
-              <PaginationPrevious 
+              <PaginationPrevious
                 onClick={() => handlePageChange(page - 1)}
                 className={page === 1 ? "pointer-events-none opacity-50" : ""}
               />
             </PaginationItem>
-            
-            {[...Array(totalPages)].map((_, i) => {
-              const pageNum = i + 1;
-              // Only show a window of 5 pages around the current page
-              if (
-                pageNum === 1 || 
-                pageNum === totalPages || 
-                (pageNum >= page - 1 && pageNum <= page + 1)
-              ) {
-                return (
-                  <PaginationItem key={pageNum}>
-                    <PaginationLink
-                      isActive={page === pageNum}
-                      onClick={() => handlePageChange(pageNum)}
-                    >
-                      {pageNum}
-                    </PaginationLink>
-                  </PaginationItem>
-                );
-              }
-              // Add ellipsis if needed
-              if (pageNum === page - 2 || pageNum === page + 2) {
-                return <PaginationItem key={`ellipsis-${pageNum}`}>...</PaginationItem>;
-              }
-              return null;
-            })}
-            
+            {[...Array(totalPages)].map((_, i) => (
+              <PaginationItem key={i + 1}>
+                <PaginationLink
+                  onClick={() => handlePageChange(i + 1)}
+                  isActive={page === i + 1}
+                >
+                  {i + 1}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
             <PaginationItem>
-              <PaginationNext 
+              <PaginationNext
                 onClick={() => handlePageChange(page + 1)}
                 className={page === totalPages ? "pointer-events-none opacity-50" : ""}
               />

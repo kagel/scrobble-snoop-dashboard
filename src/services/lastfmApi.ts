@@ -1,7 +1,8 @@
+
 import { format, subDays } from "date-fns";
 
 // Last.fm API key - using a valid API key
-const API_KEY = "1b5a4a0e2d2a071ce7f2ad9b1b349efd";
+const API_KEY = "bdad2e1a8a56f85a4622d4c80da3f6d7";
 const BASE_URL = "https://ws.audioscrobbler.com/2.0/";
 
 export interface Scrobble {
